@@ -1,0 +1,110 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15
+    container_name: xiruo-postgres
+    environment:
+      POSTGRES_DB: xiruo_db
+      POSTGRES_USER: xiruo_user
+      POSTGRES_PASSWORD: xiruo_password
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init-scripts:/docker-entrypoint-initdb.d
+    networks:
+      - xiruo-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U xiruo_user -d xiruo_db"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Redis Cache
+  redis:
+    image: redis:latest
+    container_name: xiruo-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - xiruo-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Spring Boot Backend
+  backend:
+    build:
+      context: ./xiruo-backend
+      dockerfile: Dockerfile
+    container_name: xiruo-backend
+    environment:
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_NAME=xiruo_db
+      - DB_USERNAME=xiruo_user
+      - DB_PASSWORD=xiruo_password
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - JWT_SECRET=myVerySecretJWTKey123456789
+      - CORS_ORIGINS=http://localhost:3000,http://localhost:8080
+    ports:
+      - "8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - xiruo-network
+    volumes:
+      - backend_uploads:/app/uploads
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/actuator/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Flutter Web Frontend
+  frontend:
+    build:
+      context: ./xiruo_web
+      dockerfile: Dockerfile
+    container_name: xiruo-frontend
+    ports:
+      - "3000:80"
+    depends_on:
+      - backend
+    networks:
+      - xiruo-network
+
+  # Nginx Reverse Proxy
+  nginx:
+    image: nginx:latest
+    container_name: xiruo-nginx
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf
+      - ./nginx/ssl:/etc/nginx/ssl
+    depends_on:
+      - frontend
+      - backend
+    networks:
+      - xiruo-network
+
+volumes:
+  postgres_data:
+  redis_data:
+  backend_uploads:
+
+networks:
+  xiruo-network:
+    driver: bridge

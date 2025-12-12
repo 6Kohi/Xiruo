@@ -1,0 +1,48 @@
+name: xiruo_web
+description: "Venera Web - Modern comic reading platform built with Flutter Web"
+publish_to: 'none'
+
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.10.3
+
+dependencies:
+  flutter:
+    sdk: flutter
+  
+  # HTTP client for API calls
+  dio: ^5.4.0
+  
+  # State management
+  provider: ^6.1.1
+  
+  # Routing
+  go_router: ^13.2.0
+  
+  # Local storage
+  shared_preferences: ^2.2.2
+  
+  # JSON serialization
+  json_annotation: ^4.8.1
+  
+  # UI components
+  cupertino_icons: ^1.0.8
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  
+  # Code generation for JSON serialization
+  json_serializable: ^6.7.1
+  build_runner: ^2.4.7
+  
+  # Linting
+  flutter_lints: ^6.0.0
+
+flutter:
+  uses-material-design: true
+  
+  assets:
+    - assets/images/
+    - assets/icons/
