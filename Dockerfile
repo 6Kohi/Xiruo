@@ -10,6 +10,12 @@ ENV NODE_ENV=production \
 COPY package.json package-lock.json ./
 RUN npm ci --include=dev
 
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends chromium ca-certificates fonts-noto-cjk \
+    && rm -rf /var/lib/apt/lists/*
+
+ENV XIRUO_CHROMIUM_PATH=/usr/bin/chromium
+
 COPY . .
 RUN npm run build && mkdir -p /data
 

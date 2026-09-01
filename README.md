@@ -146,19 +146,14 @@ Secrets and variables → Actions**. The token needs Docker Hub repository read 
 write permission. The same workflow will then publish matching multi-architecture
 tags to both GHCR and Docker Hub.
 
-### hanime1 source protection
+### Proxy and hanime1 source protection
 
-hanime1 can return HTTP 403 to server-side clients even when a normal browser on
-the same network can open it. Xiruo supports an optional browser-approved session:
+Open the settings button in Xiruo's top-right corner and enter the proxy IP and
+port that fnOS can reach. The values are saved under the bind-mounted `/data`
+directory, so Compose YAML changes and container recreation are not required.
 
-```dotenv
-XIRUO_HANIME1_COOKIE=cf_clearance=...
-XIRUO_HANIME1_USER_AGENT=Mozilla/5.0 ...
-```
-
-Copy both values from the same browser session and keep the browser and fnOS
-container on the same proxy exit address. The cookie is sensitive and expires;
-keep it only in the private fnOS Compose environment and never commit it. If the
-site presents an interactive CAPTCHA or binds the challenge to a browser TLS
-fingerprint, a copied session may still be rejected and must be refreshed or
-handled by a browser-assisted integration.
+When hanime1 rejects a normal server request, Xiruo automatically starts its
+bundled headless Chromium, obtains a browser session, and retries the page. The
+settings dialog also provides a manual “获取动漫会话” retry button and displays
+the latest acquisition status. Some interactive CAPTCHA challenges can still
+require changing to a proxy exit address accepted by the source.

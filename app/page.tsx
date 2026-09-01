@@ -8,7 +8,8 @@ import { useRouter, useSearchParams } from 'next/navigation';
 
 import { Badge } from '@/components/ui/badge';
 import { Button, buttonVariants } from '@/components/ui/button';
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
 import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select';
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { Switch } from '@/components/ui/switch';
@@ -58,30 +59,35 @@ export default function Home() {
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
   const [selectedItem, setSelectedItem] = useState<ContentItem | null>(() => returnedDetailId ? detailPlaceholder(returnedDetailId, returnedSource) : null);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const loadRequestId = useRef(0);
   const sourceQuery = filter === 'video' ? [videoType === 'all' ? '' : videoType, buildVideoTagQuery(videoTags, videoTagMatch)].filter(Boolean).join(' ') : comicQuery;
 
   useEffect(() => {
+    const requestId = ++loadRequestId.current;
+    if (section === 'favorites') return;
     const controller = new AbortController();
     const timer = window.setTimeout(async () => {
       setLoading(true);
       setError('');
       try {
         const result = await loadItems(activeSourceId, sourceQuery, undefined, controller.signal);
+        if (requestId !== loadRequestId.current) return;
         setItems(result.items);
         setNextCursor(result.nextCursor);
         setPaginationPaused(false);
       } catch (requestError) {
-        if (controller.signal.aborted) return;
+        if (controller.signal.aborted || requestId !== loadRequestId.current) return;
         setItems([]);
         setNextCursor(undefined);
         setError(requestError instanceof Error ? requestError.message : '真实来源加载失败');
       } finally {
-        if (!controller.signal.aborted) setLoading(false);
+        if (!controller.signal.aborted && requestId === loadRequestId.current) setLoading(false);
       }
     }, 0);
 
     return () => { window.clearTimeout(timer); controller.abort(); };
-  }, [activeSourceId, reloadKey, sourceQuery]);
+  }, [activeSourceId, reloadKey, section, sourceQuery]);
 
   const refreshFavorites = useCallback(async () => {
     try {
@@ -128,11 +134,17 @@ export default function Home() {
     setVideoType('all');
     setVisibleCount(PAGE_SIZE);
     setPaginationPaused(false);
+    setError('');
+    setLoading(true);
   }, []);
 
   const selectFavorites = useCallback(() => {
     setSection('favorites');
     setFilter('comic');
+    setComicQuery('');
+    setItems([]);
+    setError('');
+    setLoading(false);
     setVisibleCount(PAGE_SIZE);
     setSelectedItem(null);
     void refreshFavorites();
@@ -195,7 +207,7 @@ export default function Home() {
             <div><p className="font-heading text-[15px] font-semibold leading-none tracking-tight">Xiruo</p><p className="mt-1 text-[10px] font-medium uppercase tracking-[0.16em] text-muted-foreground">Private library</p></div>
           </div>
           <div className="ml-auto flex items-center gap-2">
-            <Button variant="ghost" size="icon" aria-label="打开设置"><Settings2 /></Button>
+            <Button variant="ghost" size="icon" aria-label="打开设置" aria-expanded={settingsOpen} onClick={() => setSettingsOpen(true)}><Settings2 /></Button>
           </div>
         </div>
       </header>
@@ -223,7 +235,111 @@ export default function Home() {
       </div>
       <ContentDialog key={`${selectedItem?.sourceId ?? 'closed'}-${selectedItem?.id ?? ''}`} item={selectedItem} favorite={Boolean(selectedItem && favoriteItems.some((favorite) => favorite.id === selectedItem.id))} onToggleFavorite={() => { if (selectedItem) void toggleFavorite(selectedItem); }} onClose={() => { setSelectedItem(null); if (returnedDetailId) router.replace('/', { scroll: false }); }} />
       {videoTagsOpen && <VideoTagDialog open value={videoTags} match={videoTagMatch} onOpenChange={setVideoTagsOpen} onApply={(tags, match) => { setVideoTags(tags); setVideoTagMatch(match); setVisibleCount(PAGE_SIZE); setVideoTagsOpen(false); }} />}
+      <ProxySettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} onSaved={() => setReloadKey((value) => value + 1)} />
     </main>
+  );
+}
+
+type RuntimeSettings = {
+  proxyHost: string;
+  proxyPort: string;
+  proxyEnabled: boolean;
+  browserStatus: 'idle' | 'acquiring' | 'ready' | 'error';
+  browserLastError: string;
+};
+
+function ProxySettingsDialog({ open, onOpenChange, onSaved }: { open: boolean; onOpenChange: (open: boolean) => void; onSaved: () => void }) {
+  const [proxyHost, setProxyHost] = useState('');
+  const [proxyPort, setProxyPort] = useState('');
+  const [status, setStatus] = useState<RuntimeSettings['browserStatus']>('idle');
+  const [statusError, setStatusError] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [testing, setTesting] = useState(false);
+  const [message, setMessage] = useState('');
+
+  const applySettings = useCallback((value: RuntimeSettings) => {
+    setProxyHost(value.proxyHost ?? '');
+    setProxyPort(value.proxyPort ?? '');
+    setStatus(value.browserStatus ?? 'idle');
+    setStatusError(value.browserLastError ?? '');
+  }, []);
+
+  useEffect(() => {
+    if (!open) return;
+    const controller = new AbortController();
+    void fetch('/api/settings', { signal: controller.signal, cache: 'no-store' })
+      .then(async (response) => {
+        const value = await response.json() as RuntimeSettings & { error?: string };
+        if (!response.ok) throw new Error(value.error || `HTTP ${response.status}`);
+        applySettings(value);
+      })
+      .catch((error) => { if (!controller.signal.aborted) setMessage(error instanceof Error ? error.message : '设置读取失败'); })
+      .finally(() => undefined);
+    return () => controller.abort();
+  }, [applySettings, open]);
+
+  const save = async () => {
+    setSaving(true);
+    setMessage('');
+    try {
+      const response = await fetch('/api/settings', { method: 'PUT', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ proxyHost, proxyPort }) });
+      const value = await response.json() as RuntimeSettings & { error?: string };
+      if (!response.ok) throw new Error(value.error || `HTTP ${response.status}`);
+      applySettings(value);
+      setMessage('代理设置已保存到挂载磁盘');
+      onSaved();
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : '设置保存失败');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const acquireSession = async () => {
+    setTesting(true);
+    setStatus('acquiring');
+    setStatusError('');
+    setMessage('正在通过内置浏览器获取 hanime1 会话…');
+    try {
+      const response = await fetch('/api/settings', { method: 'POST' });
+      const value = await response.json() as RuntimeSettings & { error?: string };
+      if (!response.ok) throw new Error(value.error || `HTTP ${response.status}`);
+      applySettings(value);
+      setMessage('hanime1 会话已获取，动漫页可以重新加载');
+      onSaved();
+    } catch (error) {
+      setStatus('error');
+      const nextError = error instanceof Error ? error.message : 'hanime1 会话获取失败';
+      setStatusError(nextError);
+      setMessage(nextError);
+    } finally {
+      setTesting(false);
+    }
+  };
+
+  const statusText = status === 'ready' ? '会话已就绪' : status === 'acquiring' ? '正在自动获取' : status === 'error' ? '获取失败' : '需要时自动获取';
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader><DialogTitle>网络与来源设置</DialogTitle><DialogDescription>配置 fnOS 可访问的 HTTP 混合代理。设置保存在挂载的 /data 中，电脑和手机共用。</DialogDescription></DialogHeader>
+        <div className="space-y-4 py-1">
+          <div className="grid grid-cols-[minmax(0,1fr)_112px] gap-3">
+            <label htmlFor="proxy-host" className="space-y-1.5"><span className="text-xs font-medium text-muted-foreground">代理 IP</span><Input id="proxy-host" className="h-11" inputMode="decimal" autoComplete="off" placeholder="192.168.5.200" value={proxyHost} disabled={saving || testing} onChange={(event) => setProxyHost(event.target.value)} /></label>
+            <label htmlFor="proxy-port" className="space-y-1.5"><span className="text-xs font-medium text-muted-foreground">端口</span><Input id="proxy-port" className="h-11" inputMode="numeric" autoComplete="off" placeholder="7893" value={proxyPort} disabled={saving || testing} onChange={(event) => setProxyPort(event.target.value.replace(/\D/g, ''))} /></label>
+          </div>
+          <div className="rounded-xl border border-border/70 bg-muted/35 p-3 text-xs">
+            <div className="flex items-center justify-between gap-3"><span className="text-muted-foreground">hanime1 自动会话</span><span className={status === 'ready' ? 'text-emerald-400' : status === 'error' ? 'text-destructive' : 'text-foreground'}>{statusText}</span></div>
+            {statusError && <p className="mt-2 break-words text-destructive">{statusError}</p>}
+          </div>
+          {message && <output className="block text-xs text-muted-foreground">{message}</output>}
+        </div>
+        <DialogFooter className="-mx-4 -mb-4">
+          <Button type="button" variant="outline" className="h-10" disabled={saving || testing} onClick={() => void acquireSession()}>{testing ? <LoaderCircle className="animate-spin" /> : <RefreshCw />}获取动漫会话</Button>
+          <Button type="button" className="h-10" disabled={saving || testing} onClick={() => void save()}>{saving && <LoaderCircle className="animate-spin" />}保存设置</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 
