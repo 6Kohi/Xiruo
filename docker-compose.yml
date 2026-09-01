@@ -1,0 +1,22 @@
+services:
+  xiruo:
+    build:
+      context: .
+      args:
+        NODE_IMAGE: "${XIRUO_NODE_IMAGE:-node:22-bookworm-slim}"
+    container_name: xiruo
+    restart: unless-stopped
+    ports:
+      - "${XIRUO_PORT:-3000}:3000"
+    environment:
+      PORT: 3000
+      XIRUO_ENABLE_REAL_SOURCES: "true"
+      XIRUO_PROXY_SECRET: "${XIRUO_PROXY_SECRET:-}"
+      XIRUO_DATA_DIR: /data
+      XIRUO_CACHE_SERVICE: http://127.0.0.1:4011
+      XIRUO_CACHE_SERVICE_PORT: 4011
+      XIRUO_OUTBOUND_PROXY: "${XIRUO_OUTBOUND_PROXY:-}"
+      XIRUO_SOURCE_GATEWAY: "${XIRUO_SOURCE_GATEWAY:-}"
+      XIRUO_SOURCE_GATEWAY_PORT: 4010
+    volumes:
+      - "${XIRUO_DATA_PATH:-./data}:/data"
