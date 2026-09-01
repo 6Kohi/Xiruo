@@ -123,3 +123,25 @@ docker compose -f docker-compose.ghcr.yml up -d
 The bind-mounted `/data` directory is not replaced during image upgrades. For a
 controlled rollback, set `XIRUO_IMAGE` to a version tag such as `:1.0.0` and start
 the Compose project again.
+
+### One-click fnOS deployment through Docker Hub
+
+The public Docker Hub image can be pulled without registry login:
+
+```text
+6kohi/xiruo:latest
+```
+
+Copy `docker-compose.dockerhub.yml` and `.env.dockerhub.example` to the fnOS
+Compose project directory, rename `.env.dockerhub.example` to `.env`, adjust
+`XIRUO_DATA_PATH`, and start the project. The terminal equivalent is:
+
+```bash
+docker compose -f docker-compose.dockerhub.yml up -d
+```
+
+To publish future commits to Docker Hub automatically, add the repository
+secrets `DOCKERHUB_USERNAME` and `DOCKERHUB_TOKEN` under GitHub **Settings →
+Secrets and variables → Actions**. The token needs Docker Hub repository read and
+write permission. The same workflow will then publish matching multi-architecture
+tags to both GHCR and Docker Hub.
