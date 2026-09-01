@@ -114,10 +114,19 @@ export class Hanime1Source implements VideoSource {
   }
 
   async #requestHtml(url: string, context: SourceContext): Promise<string> {
+    const headers: Record<string, string> = {
+      accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+      'accept-language': context.locale,
+      'cache-control': 'no-cache',
+      'upgrade-insecure-requests': '1',
+      'user-agent': process.env.XIRUO_HANIME1_USER_AGENT?.trim() || 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36',
+    };
+    const sessionCookie = process.env.XIRUO_HANIME1_COOKIE?.trim();
+    if (sessionCookie) headers.cookie = sessionCookie;
     const response = await this.#transport.request(url, {
       sourceId: this.id,
       signal: context.signal,
-      headers: { accept: 'text/html,application/xhtml+xml', 'accept-language': context.locale, 'user-agent': 'Mozilla/5.0 (compatible; Xiruo/0.1; private-use)' },
+      headers,
       maxBytes: 5 * 1024 * 1024,
     });
     assertSuccessful(response);

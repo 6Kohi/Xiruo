@@ -48,6 +48,8 @@ start([
   ...workerVar('XIRUO_ENABLE_REAL_SOURCES', 'false'),
   ...workerVar('XIRUO_CACHE_SERVICE', 'http://127.0.0.1:4011'),
   ...workerVar('XIRUO_SOURCE_GATEWAY'),
+  ...workerVar('XIRUO_HANIME1_COOKIE'),
+  ...workerVar('XIRUO_HANIME1_USER_AGENT'),
 ]);
 
 process.once('SIGINT', () => shutdown(0));

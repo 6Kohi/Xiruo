@@ -145,3 +145,20 @@ secrets `DOCKERHUB_USERNAME` and `DOCKERHUB_TOKEN` under GitHub **Settings →
 Secrets and variables → Actions**. The token needs Docker Hub repository read and
 write permission. The same workflow will then publish matching multi-architecture
 tags to both GHCR and Docker Hub.
+
+### hanime1 source protection
+
+hanime1 can return HTTP 403 to server-side clients even when a normal browser on
+the same network can open it. Xiruo supports an optional browser-approved session:
+
+```dotenv
+XIRUO_HANIME1_COOKIE=cf_clearance=...
+XIRUO_HANIME1_USER_AGENT=Mozilla/5.0 ...
+```
+
+Copy both values from the same browser session and keep the browser and fnOS
+container on the same proxy exit address. The cookie is sensitive and expires;
+keep it only in the private fnOS Compose environment and never commit it. If the
+site presents an interactive CAPTCHA or binds the challenge to a browser TLS
+fingerprint, a copied session may still be rejected and must be refreshed or
+handled by a browser-assisted integration.

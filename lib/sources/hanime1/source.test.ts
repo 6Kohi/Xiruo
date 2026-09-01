@@ -37,6 +37,20 @@ describe('Hanime1Source', () => {
     expect(details).toMatchObject({ title: 'Safe Fixture', description: 'Fixture description', coverUrl: 'https://hanime1.me/cover.jpg', tags: ['测试标签'] });
   });
 
+  it('forwards an optional browser session without hard-coding it', async () => {
+    vi.stubEnv('XIRUO_HANIME1_COOKIE', 'cf_clearance=fixture-session');
+    vi.stubEnv('XIRUO_HANIME1_USER_AGENT', 'Fixture Browser');
+    const request = requestMock('<a href="/watch?v=fixture-session" title="Session Fixture"></a>');
+    const source = new Hanime1Source({ request });
+
+    await source.explore(undefined, context);
+
+    const headers = new Headers(request.mock.calls[0][1].headers);
+    expect(headers.get('cookie')).toBe('cf_clearance=fixture-session');
+    expect(headers.get('user-agent')).toBe('Fixture Browser');
+    vi.unstubAllEnvs();
+  });
+
   it('resolves HLS and preserves the required referer', async () => {
     const source = new Hanime1Source({ request: requestMock(`<script>window.player = { file: "https:\\/\\/media.example.test\\/fixture.m3u8?token=abc" };</script>`) });
     await expect(source.resolvePlayback('fixture-3', context)).resolves.toEqual({ url: 'https://media.example.test/fixture.m3u8?token=abc', type: 'hls', headers: { referer: 'https://hanime1.me/' } });
