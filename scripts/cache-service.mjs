@@ -5,6 +5,7 @@ import { createServer } from 'node:http';
 import path from 'node:path';
 import { pipeline } from 'node:stream/promises';
 import { ProxyAgent, fetch } from 'undici';
+import { downloadMedia } from './cache-media.mjs';
 
 const listenHost = '127.0.0.1';
 const listenPort = Number(process.env.XIRUO_CACHE_SERVICE_PORT || 4011);
@@ -46,7 +47,7 @@ async function saveComic(request, response) {
   const id = validateId(payload.id);
   if (!payload.item || !Array.isArray(payload.pages) || payload.pages.length === 0) return sendJson(response, 400, { error: 'Invalid comic cache payload' });
   const key = `${sourceId}:${id}`;
-  if (activeJobs.has(key)) return sendJson(response, 202, await readManifest(sourceId, id));
+  if (activeJobs.has(key)) return sendJson(response, 202, publicManifest(await readManifest(sourceId, id)));
 
   const directory = comicDirectory(sourceId, id);
   await mkdir(path.join(directory, 'pages'), { recursive: true });
@@ -107,7 +108,7 @@ async function deleteComic(url, response) {
 
 async function comicDetails(url, response) {
   const manifest = await requiredManifest(url);
-  return sendJson(response, 200, { ...manifest.item, savedAt: manifest.savedAt, cacheStatus: manifest.status, cachedPages: manifest.completedPages, totalPages: manifest.totalPages });
+  return sendJson(response, 200, publicManifest(manifest));
 }
 
 async function comicChapter(url, response) {
@@ -170,32 +171,12 @@ async function writeManifest(directory, manifest) {
 }
 
 async function downloadAsset(rawUrl, directory, stem, sourceId) {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(new Error('媒体下载超时')), 60_000);
-  let response;
-  try {
-    let target = allowedMediaTarget(sourceId, rawUrl);
-    for (let redirects = 0; redirects <= 4; redirects += 1) {
-      response = await fetch(target, {
-        headers: { referer: 'https://nhentai.net/', 'user-agent': 'Mozilla/5.0' },
-        redirect: 'manual',
-        dispatcher,
-        signal: controller.signal,
-      });
-      if (response.status < 300 || response.status >= 400) break;
-      const location = response.headers.get('location');
-      if (!location || redirects === 4) throw new Error('媒体重定向无效或次数过多');
-      target = allowedMediaTarget(sourceId, new URL(location, target).toString());
-    }
-  } finally {
-    clearTimeout(timer);
-  }
-  if (!response) throw new Error('媒体下载没有响应');
-  if (!response.ok) throw new Error(`媒体下载失败（HTTP ${response.status}）`);
-  const contentType = response.headers.get('content-type')?.split(';')[0].trim().toLowerCase() || 'application/octet-stream';
-  if (!contentType.startsWith('image/')) throw new Error('来源返回的不是图片');
-  const bytes = Buffer.from(await response.arrayBuffer());
-  if (bytes.length > 32 * 1024 * 1024) throw new Error('单张图片超过 32 MB');
+  const { bytes, contentType } = await downloadMedia(rawUrl, sourceId, {
+    fetch,
+    dispatcher,
+    gateway: process.env.XIRUO_SOURCE_GATEWAY?.trim(),
+    secret,
+  });
   const extension = extensionFor(contentType);
   const file = `${stem}.${extension}`;
   const temporary = safeChild(directory, `${file}.tmp`);
@@ -250,13 +231,6 @@ function validateSource(value) {
 function validateId(value) {
   if (typeof value !== 'string' || !/^\d+$/.test(value)) throw new Error('Invalid comic id');
   return value;
-}
-
-function allowedMediaTarget(sourceId, rawUrl) {
-  if (sourceId !== 'nhentai') throw new Error('Unsupported comic source');
-  const target = new URL(rawUrl);
-  if (target.protocol !== 'https:' || target.username || target.password || !/(^|\.)nhentai\.net$/i.test(target.hostname)) throw new Error('Media host is not allowed');
-  return target;
 }
 
 function extensionFor(contentType) {

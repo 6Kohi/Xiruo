@@ -152,6 +152,12 @@ Open the settings button in Xiruo's top-right corner and enter the proxy IP and
 port that fnOS can reach. The values are saved under the bind-mounted `/data`
 directory, so Compose YAML changes and container recreation are not required.
 
+Comic cover and page downloads use the same local source gateway as browsing,
+so changes to the proxy settings also apply to subsequent offline downloads.
+Standalone cache-service deployments without `XIRUO_SOURCE_GATEWAY` continue to
+use `XIRUO_OUTBOUND_PROXY` when configured. Media downloads are limited to 60
+seconds for the full response and 32 MB per image.
+
 When hanime1 rejects a normal server request, Xiruo automatically starts its
 bundled headless Chromium, obtains a browser session, and retries the page. The
 settings dialog also provides a manual “获取动漫会话” retry button and displays
