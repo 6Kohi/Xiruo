@@ -31,9 +31,9 @@ function workerVar(name, fallback = '') {
   return ['--var', `${name}:${process.env[name]?.trim() || fallback}`];
 }
 
-start(['scripts/cache-service.mjs']);
 if (!process.env.XIRUO_SOURCE_GATEWAY?.trim()) process.env.XIRUO_SOURCE_GATEWAY = `http://127.0.0.1:${process.env.XIRUO_SOURCE_GATEWAY_PORT || 4010}/fetch`;
 start(['scripts/source-gateway.mjs']);
+start(['scripts/cache-service.mjs']);
 start([
   'node_modules/wrangler/bin/wrangler.js',
   'dev',
